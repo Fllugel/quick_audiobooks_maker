@@ -108,7 +108,7 @@ class AudiobookUI:
     def load_file(self, file, force_create=False):
         """Load and split the text file into sections."""
         if file is None:
-            return None, "Please upload a text file.", ""
+            return None, ""
         
         try:
             # Get the original filename without extension
@@ -148,16 +148,10 @@ class AudiobookUI:
                 label="Select Sections to Process"
             )
             
-            # Return the checkbox group and the status
-            status_msg = f"Loaded {len(self.processor.get_sections())} sections successfully!"
-            if dir_exists and not force_create:
-                status_msg += " (Using existing output directory)"
-            elif force_create:
-                status_msg += " (Created new output directory)"
-            return sections_checkbox, status_msg, safe_name
+            return sections_checkbox, safe_name
             
         except Exception as e:
-            return None, f"Error: {str(e)}", ""
+            return None, ""
     
     def generate_audio(self, selected_sections, voice_display_name, speed, progress=gr.Progress()):
         """Generate audio for selected sections."""
@@ -403,9 +397,9 @@ class AudiobookUI:
                 max-width: 100% !important; 
             }
             .sections-container { 
-                height: 800px !important; 
+                height: 1000px !important; 
                 overflow-y: auto !important;
-                max-height: 800px !important;
+                max-height: 1000px !important;
             }
             .sections-container > div {
                 max-height: none !important;
@@ -471,49 +465,23 @@ class AudiobookUI:
                         label="Select Sections to Process",
                         elem_classes=["sections-container"]
                     )
-                    load_status = gr.Textbox(label="Status")
             
             # Event handlers
             def handle_file_upload(file):
                 if file is None:
-                    return None, "Please upload a text file.", ""
-                
-                # Get the original filename without extension
-                book_name = Path(file.name).stem
-                output_dir = self.base_output_dir / re.sub(r'[<>:"/\\|?*]', '_', book_name)
-                
-                if output_dir.exists():
-                    # Show confirmation dialog
-                    gr.Info("Output directory already exists. Do you want to overwrite it?")
-                    return gr.update(visible=True), gr.update(visible=True), file
-                else:
-                    return self.load_file(file, False)
-            
-            confirm_btn = gr.Button("Yes, Overwrite", variant="stop", visible=False)
-            cancel_btn = gr.Button("No, Use Existing", variant="secondary", visible=False)
+                    return None, ""
+                return self.load_file(file, True)
             
             file_input.change(
                 fn=handle_file_upload,
                 inputs=[file_input],
-                outputs=[confirm_btn, cancel_btn, file_input]
-            )
-            
-            confirm_btn.click(
-                fn=lambda x: self.load_file(x, True),
-                inputs=[file_input],
-                outputs=[sections_checkbox, load_status, output_folder]
-            )
-            
-            cancel_btn.click(
-                fn=lambda x: self.load_file(x, False),
-                inputs=[file_input],
-                outputs=[sections_checkbox, load_status, output_folder]
+                outputs=[sections_checkbox, output_folder]
             )
             
             update_folder_btn.click(
                 fn=self.update_output_dir,
                 inputs=[output_folder],
-                outputs=[load_status]
+                outputs=[generate_status]
             )
             
             generate_btn.click(
