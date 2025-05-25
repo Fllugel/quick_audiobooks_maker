@@ -2,30 +2,30 @@
 echo Kokoro Audiobooks Setup and Startup Script
 echo ========================================
 
-REM Check if Python is installed
-python --version >nul 2>&1
+:: Check if Python 3.10 is installed
+python --version 2>NUL | findstr /C:"Python 3.10" >NUL
 if errorlevel 1 (
-    echo Python is not installed! Please install Python 3.10 or higher.
+    echo Python 3.10 is not installed! Please install Python 3.10.
     pause
     exit /b 1
 )
 
-REM Check if this is first run by looking for .venv
+:: Check if this is first run by looking for .venv
 if not exist .venv (
     echo First time setup detected...
     echo Creating virtual environment...
-    python -m venv .venv
+    py -3.10 -m venv .venv
     if errorlevel 1 (
         echo Failed to create virtual environment!
         pause
         exit /b 1
     )
 
-    REM Activate virtual environment
+    :: Activate virtual environment
     echo Activating virtual environment...
     call .venv\Scripts\activate
 
-    REM Check for CUDA installation
+    :: Check for CUDA installation
     echo Checking for CUDA installation...
     nvidia-smi >nul 2>&1
     if errorlevel 1 (
@@ -43,14 +43,14 @@ if not exist .venv (
         pip install torch==2.1.1+cu118 torchaudio==2.1.1+cu118 --index-url https://download.pytorch.org/whl/cu118
     )
 
-    REM Install project dependencies
+    :: Install project dependencies
     echo Installing project dependencies...
     pip install -r requirements.txt
 
     echo.
     echo Setup completed successfully!
 ) else (
-    REM Just activate the environment and run
+    :: Just activate the environment and run
     call .venv\Scripts\activate
 )
 

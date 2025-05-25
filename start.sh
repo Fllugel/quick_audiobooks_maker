@@ -3,9 +3,9 @@
 echo "Kokoro Audiobooks Setup and Startup Script"
 echo "========================================"
 
-# Check if Python is installed
-if ! command -v python3 &> /dev/null; then
-    echo "Python is not installed! Please install Python 3.10 or higher."
+# Check if Python 3.10 is installed
+if ! command -v python3.10 &> /dev/null; then
+    echo "Python 3.10 is not installed! Please install Python 3.10."
     exit 1
 fi
 
@@ -13,7 +13,7 @@ fi
 if [ ! -d ".venv" ]; then
     echo "First time setup detected..."
     echo "Creating virtual environment..."
-    python3 -m venv .venv
+    python3.10 -m venv .venv
     if [ $? -ne 0 ]; then
         echo "Failed to create virtual environment!"
         exit 1
