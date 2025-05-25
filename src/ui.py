@@ -242,15 +242,28 @@ class AudiobookUI:
                     ):
                         # Remove temporary file after successful conversion
                         if temp_output.exists():
-                            temp_output.unlink()
+                            try:
+                                temp_output.unlink()
+                            except Exception as e:
+                                print(f"Warning: Could not remove temporary file: {str(e)}")
                     else:
                         # If RVC conversion fails, use the original file
                         if temp_output.exists():
-                            temp_output.rename(final_output)
+                            try:
+                                if final_output.exists():
+                                    final_output.unlink()
+                                temp_output.rename(final_output)
+                            except Exception as e:
+                                print(f"Warning: Could not rename temporary file: {str(e)}")
                 else:
                     # If RVC is not enabled, just rename the temp file
                     if temp_output.exists():
-                        temp_output.rename(final_output)
+                        try:
+                            if final_output.exists():
+                                final_output.unlink()
+                            temp_output.rename(final_output)
+                        except Exception as e:
+                            print(f"Warning: Could not rename temporary file: {str(e)}")
                 
                 if final_output.exists():
                     self.generated_files.append(str(final_output))
@@ -413,14 +426,56 @@ class AudiobookUI:
                 return None, "Invalid voice selection."
 
             section_idx = int(section_number) - 1  # Convert to 0-based index
-            output_path = self.current_output_dir / f"section_{section_number}.wav"
+            temp_output = self.current_output_dir / f"temp_section_{section_number}.wav"
+            final_output = self.current_output_dir / f"section_{section_number}.wav"
             
             progress(0, desc="Starting regeneration...")
-            if self.processor.regenerate_section(section_idx, output_path, voice_id, speed):
-                progress(1, desc="Regeneration complete")
-                return self.generated_files, f"Successfully regenerated section {section_number}"
+            
+            # Generate speech to temporary file
+            if not self.processor.generate_speech(
+                self.processor.get_section(section_idx),
+                temp_output,
+                voice=voice_id,
+                speed=speed
+            ):
+                return self.generated_files, f"Failed to generate speech for section {section_number}"
+            
+            # Apply RVC if enabled
+            if use_rvc and rvc_model_name:
+                if self.rvc_processor.convert_audio(
+                    temp_output,
+                    final_output,
+                    f0_up_key=f0_up_key,
+                    f0_method=f0_method,
+                    index_rate=index_rate
+                ):
+                    # Remove temporary file after successful conversion
+                    if temp_output.exists():
+                        try:
+                            temp_output.unlink()
+                        except Exception as e:
+                            print(f"Warning: Could not remove temporary file: {str(e)}")
+                else:
+                    # If RVC conversion fails, use the original file
+                    if temp_output.exists():
+                        try:
+                            if final_output.exists():
+                                final_output.unlink()
+                            temp_output.rename(final_output)
+                        except Exception as e:
+                            print(f"Warning: Could not rename temporary file: {str(e)}")
             else:
-                return self.generated_files, f"Invalid section number: {section_number}"
+                # If RVC is not enabled, just rename the temp file
+                if temp_output.exists():
+                    try:
+                        if final_output.exists():
+                            final_output.unlink()
+                        temp_output.rename(final_output)
+                    except Exception as e:
+                        print(f"Warning: Could not rename temporary file: {str(e)}")
+            
+            progress(1, desc="Regeneration complete")
+            return self.generated_files, f"Successfully regenerated section {section_number}"
                 
         except ValueError:
             return self.generated_files, "Please enter a valid section number."
@@ -448,11 +503,58 @@ class AudiobookUI:
                     progress(processed_count / total_sections, desc=f"Stopped at section {section_idx + 1}")
                     return output_files, f"Regeneration stopped. Last processed: Section {section_idx}"
                 
-                output_path = self.current_output_dir / f"section_{section_idx + 1}.wav"
-                if self.processor.regenerate_section(section_idx, output_path, voice_id, speed):
-                    output_files.append(str(output_path))
+                section_number = section_idx + 1
+                temp_output = self.current_output_dir / f"temp_section_{section_number}.wav"
+                final_output = self.current_output_dir / f"section_{section_number}.wav"
+                
+                # Generate speech to temporary file
+                if not self.processor.generate_speech(
+                    self.processor.get_section(section_idx),
+                    temp_output,
+                    voice=voice_id,
+                    speed=speed
+                ):
+                    print(f"Failed to generate speech for section {section_number}")
+                    continue
+                
+                # Apply RVC if enabled
+                if use_rvc and rvc_model_name:
+                    if self.rvc_processor.convert_audio(
+                        temp_output,
+                        final_output,
+                        f0_up_key=f0_up_key,
+                        f0_method=f0_method,
+                        index_rate=index_rate
+                    ):
+                        # Remove temporary file after successful conversion
+                        if temp_output.exists():
+                            try:
+                                temp_output.unlink()
+                            except Exception as e:
+                                print(f"Warning: Could not remove temporary file: {str(e)}")
+                    else:
+                        # If RVC conversion fails, use the original file
+                        if temp_output.exists():
+                            try:
+                                if final_output.exists():
+                                    final_output.unlink()
+                                temp_output.rename(final_output)
+                            except Exception as e:
+                                print(f"Warning: Could not rename temporary file: {str(e)}")
+                else:
+                    # If RVC is not enabled, just rename the temp file
+                    if temp_output.exists():
+                        try:
+                            if final_output.exists():
+                                final_output.unlink()
+                            temp_output.rename(final_output)
+                        except Exception as e:
+                            print(f"Warning: Could not rename temporary file: {str(e)}")
+                
+                if final_output.exists():
+                    output_files.append(str(final_output))
                     processed_count += 1
-                    progress(processed_count / total_sections, desc=f"Processing Section {section_idx + 1}")
+                    progress(processed_count / total_sections, desc=f"Processing Section {section_number}")
             
             if output_files:
                 return output_files, f"Successfully regenerated sections from {start_section} onwards"

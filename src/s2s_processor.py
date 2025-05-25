@@ -4,6 +4,8 @@ from rvc_python.infer import RVCInference
 import torch
 from fairseq.data.dictionary import Dictionary
 import warnings
+import shutil
+import time
 
 # Suppress specific PyTorch deprecation warnings
 warnings.filterwarnings("ignore", message="torch.nn.utils.weight_norm is deprecated")
@@ -14,9 +16,17 @@ class RVCProcessor:
         self.rvc = None
         self.model_path = None
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.disabled = False
+        
+    def set_disabled(self, disabled=True):
+        """Set whether RVC processing is disabled."""
+        self.disabled = disabled
         
     def load_model(self, model_path):
         """Load an RVC model."""
+        if self.disabled:
+            return True
+            
         try:
             if not self.rvc:
                 self.rvc = RVCInference(device=self.device)
@@ -32,6 +42,25 @@ class RVCProcessor:
     def convert_audio(self, input_path, output_path, f0_up_key=0, f0_method="harvest", index_rate=0.5):
         """Convert audio using the loaded RVC model."""
         try:
+            if self.disabled:
+                # If RVC is disabled, just copy the input file to output
+                try:
+                    # Ensure any existing files are properly closed and removed
+                    if os.path.exists(output_path):
+                        try:
+                            os.remove(output_path)
+                        except PermissionError:
+                            # If we can't remove it, try to wait a bit and try again
+                            time.sleep(0.5)
+                            os.remove(output_path)
+                    
+                    # Use copyfile instead of copy2 to avoid metadata copying issues
+                    shutil.copyfile(input_path, output_path)
+                    return True
+                except Exception as e:
+                    print(f"Error during file copy: {str(e)}")
+                    return False
+                
             if not self.rvc or not self.model_path:
                 raise Exception("No RVC model loaded")
             
