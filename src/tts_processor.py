@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.modules.rnn")
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch.nn.utils.weight_norm")
+warnings.filterwarnings("ignore", message="words count mismatch")
 
 @dataclass
 class Speaker:
@@ -87,9 +88,9 @@ class TTSProcessor:
             device = "cuda" if torch.cuda.is_available() else "cpu"
             print(f"Using device: {device}")
             
-            # Initialize Kokoro pipeline with explicit repo_id
+            # Initialize Kokoro pipeline with explicit repo_id and lang_code
             self.pipeline = KPipeline(
-                lang_code=self.current_lang_code,
+                lang_code=self.current_lang_code or 'a',  # Default to US English if None
                 repo_id='hexgrad/Kokoro-82M'
             )
             print("TTS model initialized successfully")
@@ -167,6 +168,9 @@ class TTSProcessor:
             if speaker.lang_code != self.current_lang_code:
                 self.current_lang_code = speaker.lang_code
                 self._initialize_model()
+                if self.pipeline is None:
+                    print("Failed to reinitialize TTS model with new language")
+                    return False
 
             # Generate speech using Kokoro
             generator = self.pipeline(text, voice=voice, speed=speed)
