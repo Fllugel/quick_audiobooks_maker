@@ -13,6 +13,27 @@ A powerful application that converts text files to audiobooks using Kokoro TTS a
 - CUDA-compatible GPU (recommended for faster processing)
 - NVIDIA drivers installed
 - CUDA Toolkit 11.8 installed on your system
+- FFmpeg installed on your system (required for audio concatenation)
+
+### FFmpeg Installation
+FFmpeg is required for concatenating audio files into a complete audiobook:
+
+1. **Windows**
+   ```bash
+   winget install ffmpeg
+   ```
+   or download from [FFmpeg Official Website](https://ffmpeg.org/download.html)
+
+2. **Linux**
+   ```bash
+   sudo apt update
+   sudo apt install ffmpeg
+   ```
+
+3. **macOS**
+   ```bash
+   brew install ffmpeg
+   ```
 
 ### CUDA Installation
 For GPU acceleration to work properly, you need to install CUDA Toolkit 11.8:

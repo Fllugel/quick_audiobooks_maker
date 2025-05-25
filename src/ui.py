@@ -11,6 +11,8 @@ import tempfile
 from .tts_processor import TTSProcessor
 from .s2s_processor import RVCProcessor
 from datetime import datetime
+from pydub import AudioSegment
+import io
 
 class AudiobookUI:
     def __init__(self):
@@ -627,6 +629,35 @@ class AudiobookUI:
         section_num = current_file.stem.split('_')[1]
         return f"Playing Section {section_num} ({self.current_audio_index + 1}/{len(self.generated_files)})"
 
+    def concatenate_audio_files(self):
+        """Concatenate all generated audio files into a single file."""
+        if not self.generated_files:
+            return None, "No audio files to concatenate."
+        
+        try:
+            # Create a temporary file for the concatenated audio
+            temp_output = self.current_output_dir / "temp_concatenated.wav"
+            final_output = self.current_output_dir / "complete_audiobook.wav"
+            
+            # Load and concatenate all audio files
+            combined = AudioSegment.empty()
+            for audio_file in self.generated_files:
+                audio = AudioSegment.from_wav(audio_file)
+                combined += audio
+            
+            # Export the concatenated audio
+            combined.export(temp_output, format="wav")
+            
+            # Move the temporary file to the final location
+            if final_output.exists():
+                final_output.unlink()
+            temp_output.rename(final_output)
+            
+            return str(final_output), "Audio files concatenated successfully!"
+            
+        except Exception as e:
+            return None, f"Error concatenating audio files: {str(e)}"
+
     def create_ui(self):
         """Create the Gradio interface."""
         with gr.Blocks(title="Kokoro Audiobook Generator", css="""
@@ -741,10 +772,19 @@ class AudiobookUI:
                             label="Now Playing",
                             interactive=True
                         )
-                        audio_player = gr.Audio(label="Audio Player", interactive=False, autoplay=True)
+                        audio_player = gr.Audio(label="Audio Player", interactive=False, autoplay=False)
                         with gr.Row():
                             prev_btn = gr.Button("⏮ Previous", variant="secondary")
                             next_btn = gr.Button("Next ⏭", variant="secondary")
+                    
+                    # Download Complete Audiobook Section
+                    with gr.Accordion("Download Complete Audiobook", open=False):
+                        with gr.Column():
+                            with gr.Row():
+                                concatenate_btn = gr.Button("Concatenate Audio Files", variant="primary")
+                            with gr.Row():
+                                download_btn = gr.File(label="Download Complete Audiobook", visible=False)
+                            download_status = gr.Textbox(label="Download Status", visible=False)
                 
                 # Right column: Sections
                 with gr.Column(scale=2):
@@ -808,6 +848,19 @@ class AudiobookUI:
                     choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
                     return current_audio, gr.update(choices=choices, value=choices[section_num] if choices else None)
                 return None, gr.update(choices=[], value=None)
+
+            # Add event handlers for concatenation and download
+            def handle_concatenation():
+                output_file, status = self.concatenate_audio_files()
+                if output_file:
+                    return {
+                        download_btn: gr.update(visible=True, value=output_file),
+                        download_status: gr.update(visible=True, value=status)
+                    }
+                return {
+                    download_btn: gr.update(visible=False),
+                    download_status: gr.update(visible=True, value=status)
+                }
 
             # Update the event handlers
             file_input.change(
@@ -913,6 +966,12 @@ class AudiobookUI:
                 fn=on_track_selected,
                 inputs=[track_selector],
                 outputs=[audio_player, track_selector]
+            )
+
+            concatenate_btn.click(
+                fn=handle_concatenation,
+                inputs=[],
+                outputs=[download_btn, download_status]
             )
         
         return interface
