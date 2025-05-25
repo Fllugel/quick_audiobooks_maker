@@ -2,10 +2,11 @@
 echo Kokoro Audiobooks Setup and Startup Script
 echo ========================================
 
-:: Check if Python 3.10 is installed
-python --version 2>NUL | findstr /C:"Python 3.10" >NUL
+:: Check if Python 3.10 is installed using py launcher
+py -3.10 --version >nul 2>&1
 if errorlevel 1 (
     echo Python 3.10 is not installed! Please install Python 3.10.
+    echo You can download it from: https://www.python.org/downloads/release/python-3100/
     pause
     exit /b 1
 )
