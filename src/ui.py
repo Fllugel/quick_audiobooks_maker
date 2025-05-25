@@ -36,6 +36,10 @@ class AudiobookUI:
         # Initialize RVC model choices
         self.rvc_model_choices = {}
         self.update_rvc_models()
+        # Audio player state
+        self.current_audio_index = 0
+        self.is_playing = False
+        self.last_played_audio = None
     
     def create_output_directory(self, book_name, force_create=False):
         """Create a directory for the book output."""
@@ -117,6 +121,21 @@ class AudiobookUI:
                 except Exception as e:
                     print(f"Warning: Could not save image {filename}: {str(e)}")
     
+    def get_existing_audio_files(self, output_dir):
+        """Get list of existing audio files in the output directory."""
+        if not output_dir or not output_dir.exists():
+            return []
+        # Get all wav files and sort them by section number
+        audio_files = []
+        for file in output_dir.glob("section_*.wav"):
+            try:
+                section_num = int(file.stem.split('_')[1])
+                audio_files.append((section_num, str(file)))
+            except (ValueError, IndexError):
+                continue
+        # Sort by section number and return just the file paths
+        return [file for _, file in sorted(audio_files)]
+
     def load_file(self, file, force_create=False):
         """Load and split the text file into sections."""
         if file is None:
@@ -128,6 +147,11 @@ class AudiobookUI:
             
             # Create output directory
             self.current_output_dir, safe_name, dir_exists = self.create_output_directory(book_name, force_create)
+            
+            # Check for existing audio files
+            self.generated_files = self.get_existing_audio_files(self.current_output_dir)
+            if self.generated_files:
+                self.current_audio_index = 0
             
             # Handle different file types
             file_path = Path(file.name)
@@ -272,9 +296,9 @@ class AudiobookUI:
                     progress(processed_count / self.total_sections, desc=f"Processing section {section_idx}")
 
             if processed_count > 0:
-                return None, f"Audio generation completed successfully! Generated {processed_count} sections."
+                return self.generated_files, f"Audio generation completed successfully! Generated {processed_count} sections."
             else:
-                return None, "Failed to generate any audio sections."
+                return [], "Failed to generate any audio sections."
 
         except Exception as e:
             return None, f"Error during audio generation: {str(e)}"
@@ -282,6 +306,9 @@ class AudiobookUI:
     def stop_generation(self):
         """Stop the current generation process."""
         self.is_generating = False
+        # Refresh the list of generated files
+        if self.current_output_dir:
+            self.generated_files = self.get_existing_audio_files(self.current_output_dir)
         if self.current_section_index > 0:
             return f"Generation stopped at section {self.current_section_index}"
         return "Generation stopped"
@@ -368,7 +395,7 @@ class AudiobookUI:
 
         except Exception as e:
             self.is_generating = False
-            return None, f"Error: {str(e)}"
+            return [], f"Error: {str(e)}"
     
     def update_output_dir(self, folder_name):
         """Update the output directory name."""
@@ -572,6 +599,34 @@ class AudiobookUI:
         self.rvc_model_choices = {model["name"]: model["path"] for model in models}
         return list(self.rvc_model_choices.keys())
 
+    def get_current_audio(self):
+        """Get the current audio file to play."""
+        if not self.generated_files:
+            return None
+        return self.generated_files[self.current_audio_index]
+
+    def next_audio(self):
+        """Move to the next audio file."""
+        if not self.generated_files:
+            return None
+        self.current_audio_index = (self.current_audio_index + 1) % len(self.generated_files)
+        return self.get_current_audio()
+
+    def previous_audio(self):
+        """Move to the previous audio file."""
+        if not self.generated_files:
+            return None
+        self.current_audio_index = (self.current_audio_index - 1) % len(self.generated_files)
+        return self.get_current_audio()
+
+    def get_audio_info(self):
+        """Get information about the current audio file."""
+        if not self.generated_files:
+            return "No audio files available"
+        current_file = Path(self.generated_files[self.current_audio_index])
+        section_num = current_file.stem.split('_')[1]
+        return f"Playing Section {section_num} ({self.current_audio_index + 1}/{len(self.generated_files)})"
+
     def create_ui(self):
         """Create the Gradio interface."""
         with gr.Blocks(title="Kokoro Audiobook Generator", css="""
@@ -653,7 +708,7 @@ class AudiobookUI:
                         index_rate = gr.Slider(
                             minimum=0.0,
                             maximum=1.0,
-                            value=0.5,
+                            value=1,
                             step=0.1,
                             label="Index Rate",
                             visible=False
@@ -677,7 +732,19 @@ class AudiobookUI:
                                     regenerate_section_btn = gr.Button("Regenerate This Section", variant="secondary")
                                     regenerate_from_btn = gr.Button("Regenerate From This Section", variant="secondary")
                     
-                    generate_status = gr.Textbox(label="Generation Status")
+                    generate_status = gr.Textbox(label="Status")
+
+                    # Audio Player Section
+                    with gr.Accordion("Audio Player", open=False):
+                        track_selector = gr.Dropdown(
+                            choices=[],
+                            label="Now Playing",
+                            interactive=True
+                        )
+                        audio_player = gr.Audio(label="Audio Player", interactive=False, autoplay=True)
+                        with gr.Row():
+                            prev_btn = gr.Button("⏮ Previous", variant="secondary")
+                            next_btn = gr.Button("Next ⏭", variant="secondary")
                 
                 # Right column: Sections
                 with gr.Column(scale=2):
@@ -692,13 +759,61 @@ class AudiobookUI:
             # Event handlers
             def handle_file_upload(file):
                 if file is None:
-                    return None, ""
-                return self.load_file(file, True)
+                    return None, "", gr.update(choices=[], value=None), None
+                sections, name = self.load_file(file, True)
+                if self.generated_files:
+                    current_audio = self.get_current_audio()
+                    choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
+                    return sections, name, gr.update(choices=choices, value=choices[0] if choices else None), current_audio
+                return sections, name, gr.update(choices=[], value=None), None
             
+            def handle_generation_complete(files, status):
+                if files:
+                    self.generated_files = files
+                    self.current_audio_index = 0
+                    self.last_played_audio = None
+                    current_audio = self.get_current_audio()
+                    choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
+                    return current_audio, status, gr.update(choices=choices, value=choices[0] if choices else None)
+                return None, "No audio files available", gr.update(choices=[], value=None)
+
+            def handle_stop_generation():
+                """Handle stop generation and update audio player."""
+                status = self.stop_generation()
+                if self.generated_files:
+                    current_audio = self.get_current_audio()
+                    choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
+                    return status, current_audio, gr.update(choices=choices, value=choices[self.current_audio_index] if choices else None)
+                return status, None, gr.update(choices=[], value=None)
+
+            def handle_next():
+                next_audio = self.next_audio()
+                self.last_played_audio = next_audio
+                choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
+                return next_audio, gr.update(choices=choices, value=choices[self.current_audio_index] if choices else None)
+
+            def handle_previous():
+                prev_audio = self.previous_audio()
+                self.last_played_audio = prev_audio
+                choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
+                return prev_audio, gr.update(choices=choices, value=choices[self.current_audio_index] if choices else None)
+
+            def on_track_selected(track_name):
+                """Handle track selection from dropdown."""
+                if track_name and self.generated_files:
+                    section_num = int(track_name.split()[1]) - 1
+                    self.current_audio_index = section_num
+                    self.last_played_audio = None
+                    current_audio = self.get_current_audio()
+                    choices = [f"Section {i+1}" for i in range(len(self.generated_files))]
+                    return current_audio, gr.update(choices=choices, value=choices[section_num] if choices else None)
+                return None, gr.update(choices=[], value=None)
+
+            # Update the event handlers
             file_input.change(
                 fn=handle_file_upload,
                 inputs=[file_input],
-                outputs=[sections_checkbox, output_folder]
+                outputs=[sections_checkbox, output_folder, track_selector, audio_player]
             )
             
             update_folder_btn.click(
@@ -735,7 +850,7 @@ class AudiobookUI:
             )
             
             generate_btn.click(
-                fn=self.generate_audio,
+                fn=lambda *args: handle_generation_complete(*self.generate_audio(*args)),
                 inputs=[
                     sections_checkbox,
                     voice_dropdown,
@@ -746,17 +861,17 @@ class AudiobookUI:
                     f0_method,
                     index_rate
                 ],
-                outputs=[generate_status]
+                outputs=[audio_player, generate_status, track_selector]
             )
             
             stop_btn.click(
-                fn=self.stop_generation,
+                fn=handle_stop_generation,
                 inputs=[],
-                outputs=[generate_status]
+                outputs=[generate_status, audio_player, track_selector]
             )
             
             continue_btn.click(
-                fn=self.continue_generation,
+                fn=lambda *args: handle_generation_complete(*self.continue_generation(*args)),
                 inputs=[
                     sections_checkbox,
                     voice_dropdown,
@@ -767,19 +882,37 @@ class AudiobookUI:
                     f0_method,
                     index_rate
                 ],
-                outputs=[generate_status]
+                outputs=[audio_player, generate_status, track_selector]
             )
             
             regenerate_section_btn.click(
-                fn=self.regenerate_section,
+                fn=lambda *args: handle_generation_complete(*self.regenerate_section(*args)),
                 inputs=[section_number, voice_dropdown, speed_slider, use_rvc, rvc_model, f0_up_key, f0_method, index_rate],
-                outputs=[generate_status]
+                outputs=[audio_player, generate_status, track_selector]
             )
             
             regenerate_from_btn.click(
-                fn=self.regenerate_from_section,
+                fn=lambda *args: handle_generation_complete(*self.regenerate_from_section(*args)),
                 inputs=[section_number, voice_dropdown, speed_slider, use_rvc, rvc_model, f0_up_key, f0_method, index_rate],
-                outputs=[generate_status]
+                outputs=[audio_player, generate_status, track_selector]
+            )
+
+            next_btn.click(
+                fn=handle_next,
+                inputs=[],
+                outputs=[audio_player, track_selector]
+            )
+
+            prev_btn.click(
+                fn=handle_previous,
+                inputs=[],
+                outputs=[audio_player, track_selector]
+            )
+
+            track_selector.change(
+                fn=on_track_selected,
+                inputs=[track_selector],
+                outputs=[audio_player, track_selector]
             )
         
         return interface
