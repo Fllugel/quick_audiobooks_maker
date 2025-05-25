@@ -1,0 +1,11 @@
+kokoro>=0.9.4
+soundfile
+torch
+torchaudio
+numpy
+librosa
+scipy
+gradio>=4.0.0
+ebooklib
+beautifulsoup4
+rvc-python 
