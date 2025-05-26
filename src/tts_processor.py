@@ -129,9 +129,44 @@ class TTSProcessor:
         return grade_map.get(grade, -2)
 
     def split_text(self, text):
-        """Split text into manageable sections."""
-        # Simple splitting by paragraphs
-        self.sections = [section.strip() for section in text.split('\n\n') if section.strip()]
+        """Split text into manageable sections with a 450 character limit per section."""
+        # First split by paragraphs
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        
+        self.sections = []
+        current_section = ""
+        
+        for paragraph in paragraphs:
+            # If adding this paragraph would exceed the limit, start a new section
+            if len(current_section) + len(paragraph) > 420:
+                # If current section is not empty, add it to sections
+                if current_section:
+                    self.sections.append(current_section.strip())
+                    current_section = ""
+                
+                # If paragraph itself is longer than limit, split it into words
+                if len(paragraph) > 420:
+                    words = paragraph.split()
+                    current_section = ""
+                    for word in words:
+                        if len(current_section) + len(word) + 1 <= 420:  # +1 for space
+                            current_section += (word + " ")
+                        else:
+                            if current_section:
+                                self.sections.append(current_section.strip())
+                            current_section = word + " "
+                else:
+                    current_section = paragraph
+            else:
+                if current_section:
+                    current_section += " " + paragraph
+                else:
+                    current_section = paragraph
+        
+        # Add the last section if it's not empty
+        if current_section:
+            self.sections.append(current_section.strip())
+        
         return len(self.sections)
     
     def get_sections(self):

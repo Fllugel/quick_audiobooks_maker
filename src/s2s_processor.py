@@ -29,19 +29,14 @@ class RVCProcessor:
             
         try:
             if not self.rvc:
-                print(f"Initializing RVC with device: {self.device}")
                 self.rvc = RVCInference(device=self.device)
             
             # Load the model
-            print(f"Loading RVC model from: {model_path}")
             self.rvc.load_model(model_path)
             self.model_path = model_path
-            print("RVC model loaded successfully")
             return True
         except Exception as e:
             print(f"Error loading RVC model: {str(e)}")
-            print(f"Model path: {model_path}")
-            print(f"Device: {self.device}")
             return False
             
     def convert_audio(self, input_path, output_path, f0_up_key=0, f0_method="harvest", index_rate=0.5):
@@ -70,7 +65,6 @@ class RVCProcessor:
                 raise Exception("No RVC model loaded")
             
             # Set RVC parameters
-            print(f"Setting RVC parameters: f0_method={f0_method}, f0_up_key={f0_up_key}, index_rate={index_rate}")
             self.rvc.f0method = f0_method
             self.rvc.f0up_key = f0_up_key
             self.rvc.index_rate = index_rate
@@ -79,18 +73,12 @@ class RVCProcessor:
             self.rvc.rms_mix_rate = 0.25
             self.rvc.protect = 0.33
                 
-            print(f"Converting audio: {input_path} -> {output_path}")
             self.rvc.infer_file(
                 str(input_path),
                 str(output_path)
             )
-            print("Audio conversion completed successfully")
             return True
         except Exception as e:
-            print(f"Error converting audio: {str(e)}")
-            print(f"Input path: {input_path}")
-            print(f"Output path: {output_path}")
-            print(f"Model path: {self.model_path}")
             return False
             
     def get_available_models(self, models_dir="rvc_models"):

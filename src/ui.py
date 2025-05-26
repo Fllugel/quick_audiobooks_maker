@@ -173,10 +173,8 @@ class AudiobookUI:
             # Create a list of section choices with text previews
             section_choices = []
             for i, section in enumerate(self.processor.get_sections()):
-                # Get first 1000 characters of the section for preview
-                preview = section[:1000].replace('\n', ' ').strip()
-                if len(section) > 1000:
-                    preview += "..."
+                # Get the full section text for preview
+                preview = section.replace('\n', ' ').strip()
                 section_choices.append(f"Section {i+1}: {preview}")
             
             # Create checkbox group for selection
@@ -635,6 +633,7 @@ class AudiobookUI:
             return None, "No audio files to concatenate."
         
         try:
+            gr.info("Starting audio file concatenation...")
             # Create a temporary file for the concatenated audio
             temp_output = self.current_output_dir / "temp_concatenated.wav"
             final_output = self.current_output_dir / "complete_audiobook.wav"
