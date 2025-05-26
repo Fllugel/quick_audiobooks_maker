@@ -1,6 +1,6 @@
 # Quick Audiobooks Maker
 
-A sample application that converts text files to audiobooks using Kokoro TTS and voice conversion technology. This tool combines advanced text-to-speech capabilities with voice conversion to create natural-sounding audiobooks with customizable voices.
+A simple application that converts text files to audiobooks using Kokoro TTS and voice conversion technology. This tool combines advanced text-to-speech capabilities with voice conversion to create natural-sounding audiobooks with customizable voices.
 
 ## Features
 - Load and process text files (supports various formats (tested for .txt and .epub))
