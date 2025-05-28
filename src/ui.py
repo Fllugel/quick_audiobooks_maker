@@ -633,7 +633,7 @@ class AudiobookUI:
             return None, "No audio files to concatenate."
         
         try:
-            gr.info("Starting audio file concatenation...")
+            gr.Info("Starting audio file concatenation...")
             # Create a temporary file for the concatenated audio
             temp_output = self.current_output_dir / "temp_concatenated.wav"
             final_output = self.current_output_dir / "complete_audiobook.wav"
