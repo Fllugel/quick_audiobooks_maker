@@ -9,6 +9,7 @@ import numpy as np
 import warnings
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+import re
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.modules.rnn")
@@ -62,6 +63,7 @@ class TTSProcessor:
 
     def __init__(self):
         self.sections = []
+        self.raw_text = ""
         self.last_generated_section = -1
         self.pipeline = None
         self.current_lang_code = 'a'  # Default to US English
@@ -129,49 +131,33 @@ class TTSProcessor:
         return grade_map.get(grade, -2)
 
     def split_text(self, text):
-        """Split text into manageable sections with a 450 character limit per section."""
-        # First split by paragraphs
-        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        """Split text into sections by sentences and newlines."""
+        # Store the raw text
+        self.raw_text = text
         
-        self.sections = []
-        current_section = ""
+        # First split by newlines
+        paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
         
+        # Split each paragraph into sentences
+        sentences = []
         for paragraph in paragraphs:
-            # If adding this paragraph would exceed the limit, start a new section
-            if len(current_section) + len(paragraph) > 420:
-                # If current section is not empty, add it to sections
-                if current_section:
-                    self.sections.append(current_section.strip())
-                    current_section = ""
-                
-                # If paragraph itself is longer than limit, split it into words
-                if len(paragraph) > 420:
-                    words = paragraph.split()
-                    current_section = ""
-                    for word in words:
-                        if len(current_section) + len(word) + 1 <= 420:  # +1 for space
-                            current_section += (word + " ")
-                        else:
-                            if current_section:
-                                self.sections.append(current_section.strip())
-                            current_section = word + " "
-                else:
-                    current_section = paragraph
-            else:
-                if current_section:
-                    current_section += " " + paragraph
-                else:
-                    current_section = paragraph
+            # Split by common sentence endings followed by space or newline
+            # This regex handles .!? followed by space or end of string
+            paragraph_sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+            sentences.extend([s.strip() for s in paragraph_sentences if s.strip()])
         
-        # Add the last section if it's not empty
-        if current_section:
-            self.sections.append(current_section.strip())
+        # Each sentence becomes its own section
+        self.sections = sentences
         
         return len(self.sections)
     
     def get_sections(self):
         """Get all sections."""
         return self.sections
+
+    def get_raw_text(self):
+        """Get the raw text."""
+        return self.raw_text
     
     def get_section(self, index):
         """Get a specific section by index."""
@@ -183,6 +169,16 @@ class TTSProcessor:
         """Get the index of the last generated section."""
         return self.last_generated_section
     
+    def _clean_speaker_id(self, speaker_id: str) -> str:
+        """Clean up speaker ID by removing region, grade, and emoji."""
+        # Remove [US] or [UK] prefix
+        speaker_id = speaker_id.replace('[US]', '').replace('[UK]', '').strip()
+        # Remove grade in parentheses and emoji
+        speaker_id = speaker_id.split('(')[0].strip()
+        # Remove any remaining emoji using simple character check
+        speaker_id = ''.join(char for char in speaker_id if ord(char) < 0x10000).strip()
+        return speaker_id
+
     def generate_speech(self, text, output_path, voice="af_heart", speed=1.0):
         """Generate speech from text using Kokoro."""
         if self.pipeline is None:
@@ -193,6 +189,9 @@ class TTSProcessor:
                 return False
             
         try:
+            # Clean up the speaker ID
+            voice = self._clean_speaker_id(voice)
+            
             # Get speaker info
             speaker = self.get_speaker_info(voice)
             if not speaker:
@@ -214,13 +213,19 @@ class TTSProcessor:
             output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Get the first (and only) audio segment
+            # Collect all audio segments
+            all_audio = []
             for _, _, audio in generator:
-                # Convert to audio file
-                sf.write(str(output_path), audio, 24000)  # Kokoro uses 24kHz sample rate
-                break  # We only need the first segment
+                all_audio.append(audio)
             
-            return True
+            if all_audio:
+                # Concatenate all audio segments
+                combined_audio = np.concatenate(all_audio)
+                # Convert to audio file
+                sf.write(str(output_path), combined_audio, 24000) 
+                return True
+            
+            return False
         except Exception as e:
             print(f"Error generating speech: {str(e)}")
             return False

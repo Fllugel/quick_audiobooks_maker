@@ -17,6 +17,7 @@ class RVCProcessor:
         self.model_path = None
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.disabled = False
+        self.model_choices = {}  # Initialize model choices dictionary
         
     def set_disabled(self, disabled=True):
         """Set whether RVC processing is disabled."""
@@ -113,4 +114,6 @@ class RVCProcessor:
                         "path": str(pth_file)
                     })
         
+        # Update model choices dictionary
+        self.model_choices = {model["name"]: model["path"] for model in models}
         return models 
